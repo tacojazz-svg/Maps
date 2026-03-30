@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🌳 Repérage Arbres — Les Hubacs</title>
+<!-- Leaflet from CDN — works when hosted on HTTPS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+:root{
+  --forest:#2d5016;--leaf:#5a8a2e;--sage:#8fb56b;
+  --cream:#f7f4ed;--soil:#3d2b1a;--accent:#e8a038;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;overflow:hidden;}
+body{font-family:'Helvetica Neue',Arial,sans-serif;background:var(--soil);color:var(--cream);
+  display:flex;flex-direction:column;}
+
+header{background:linear-gradient(135deg,var(--forest),#1a3009);padding:10px 14px 8px;
+  display:flex;align-items:center;justify-content:space-between;
+  border-bottom:2px solid var(--leaf);flex-shrink:0;}
+.htitle{font-size:15px;font-weight:700;line-height:1.1;}
+.htitle small{font-size:9px;color:var(--sage);display:block;letter-spacing:.8px;font-weight:400;}
+.hcount{background:var(--leaf);color:#fff;font-size:12px;padding:4px 10px;border-radius:20px;font-weight:600;}
+
+#map{flex:1;min-height:0;z-index:1;}
+
+/* Custom Leaflet tree icon */
+.tree-div-icon{background:rgba(45,80,22,.92);border:2.5px solid #8fb56b;border-radius:50%;
+  width:30px;height:30px;display:flex;align-items:center;justify-content:center;
+  font-size:16px;box-shadow:0 2px 8px rgba(0,0,0,.6);cursor:pointer;}
+
+#bottom{background:linear-gradient(0deg,#1a3009,var(--forest));
+  padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px;
+  border-top:2px solid var(--leaf);flex-shrink:0;}
+#status{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--sage);font-family:monospace;flex-wrap:wrap;}
+.dot{width:8px;height:8px;border-radius:50%;background:#444;flex-shrink:0;transition:background .3s;}
+.dot.s{background:#4fc3f7;animation:dp 1.5s infinite;}
+.dot.ok{background:var(--leaf);}
+@keyframes dp{0%,100%{opacity:1}50%{opacity:.3}}
+
+#btn-plant{background:linear-gradient(135deg,var(--leaf),var(--forest));border:2px solid var(--sage);
+  color:#fff;font-size:17px;font-weight:700;padding:13px;border-radius:13px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  box-shadow:0 4px 15px rgba(0,0,0,.4);-webkit-tap-highlight-color:transparent;}
+#btn-plant:active{transform:scale(.97);}
+#btn-plant.flash{background:linear-gradient(135deg,var(--accent),#b07820);border-color:var(--accent);}
+
+.brow{display:flex;gap:6px;}
+.bs{flex:1;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);
+  color:var(--cream);font-size:11px;padding:9px 3px;border-radius:10px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:3px;
+  -webkit-tap-highlight-color:transparent;}
+.bs:active{background:rgba(255,255,255,.2);}
+.bs.hi{border-color:var(--sage);color:var(--sage);}
+.bs.on{background:rgba(90,138,46,.3);border-color:var(--sage);color:var(--sage);}
+.bs.red{border-color:rgba(200,60,40,.4);color:#e08070;}
+
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);
+  z-index:1000;align-items:center;justify-content:center;padding:16px;}
+.overlay.on{display:flex;}
+.mbox{background:linear-gradient(135deg,var(--forest),var(--soil));border:2px solid var(--leaf);
+  border-radius:16px;padding:20px;width:100%;max-width:340px;}
+.mtitle{font-size:17px;font-weight:700;margin-bottom:12px;}
+.mlabel{font-size:11px;color:var(--sage);margin-bottom:4px;display:block;font-family:monospace;}
+.minput{width:100%;background:rgba(0,0,0,.3);border:1px solid var(--sage);border-radius:9px;
+  padding:10px 12px;color:var(--cream);font-size:15px;margin-bottom:12px;outline:none;}
+.minput:focus{border-color:var(--accent);}
+.mbtns{display:flex;gap:8px;}
+.mbtn{flex:1;padding:11px;border-radius:9px;border:none;font-size:14px;font-weight:600;cursor:pointer;}
+.mbtn.ok{background:var(--leaf);color:#fff;}
+.mbtn.no{background:rgba(255,255,255,.08);color:var(--cream);border:1px solid rgba(255,255,255,.15);}
+
+.lbox{background:linear-gradient(135deg,var(--forest),#1a3009);border:2px solid var(--leaf);
+  border-radius:16px;padding:16px;width:100%;max-width:400px;max-height:75vh;display:flex;flex-direction:column;}
+.ltop{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.ltop h3{font-size:16px;font-weight:700;}
+.lclose{background:none;border:none;color:var(--sage);font-size:22px;cursor:pointer;padding:0 4px;}
+.lscroll{overflow-y:auto;flex:1;}
+.litem{display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid rgba(143,181,107,.2);}
+.lnum{background:var(--accent);color:#fff;font-size:11px;font-family:monospace;font-weight:700;
+  width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.linfo{flex:1;font-size:12px;}
+.linfo b{display:block;font-size:13px;}
+.linfo small{color:var(--sage);font-family:monospace;font-size:9px;}
+.lbtn{border:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;margin-left:3px;}
+.lbtn.go{background:rgba(90,138,46,.3);color:var(--sage);}
+.lbtn.del{background:rgba(200,60,40,.3);color:#e08070;}
+
+#toast{position:fixed;bottom:130px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--leaf);color:#fff;font-size:12px;font-family:monospace;
+  padding:9px 16px;border-radius:20px;z-index:2000;opacity:0;transition:all .3s;
+  white-space:nowrap;pointer-events:none;}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* Leaflet popup style */
+.leaflet-popup-content b{color:#2d5016;}
+.leaflet-popup-content small{color:#888;font-family:monospace;font-size:10px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="htitle">🌳 Repérage Arbres<small>465 RTE DES HUBACS · LE POËT LAVAL</small></div>
+  <div class="hcount" id="hcount">0 arbre(s)</div>
+</header>
+
+<div id="map"></div>
+
+<div id="bottom">
+  <div id="status">
+    <div style="display:flex;align-items:center;gap:5px">
+      <div class="dot" id="gdot"></div>
+      <span id="gtext">Appuyez sur 📡 pour activer le GPS</span>
+    </div>
+    <span id="gcoords"></span>
+  </div>
+  <button id="btn-plant">🌱 Plante repérée à ma position !</button>
+  <div class="brow">
+    <button class="bs hi" id="btn-gps">📡 GPS</button>
+    <button class="bs hi" id="btn-sat">🛰 Satellite</button>
+    <button class="bs" id="btn-list">📋 Liste</button>
+    <button class="bs" id="btn-export">💾 CSV</button>
+    <button class="bs red" id="btn-undo">↩</button>
+  </div>
+</div>
+
+<!-- Modal label -->
+<div class="overlay" id="modal">
+  <div class="mbox">
+    <div class="mtitle">🌳 Nommer cet arbre</div>
+    <label class="mlabel">Espèce / Description (optionnel)</label>
+    <input class="minput" id="tree-input" type="text" placeholder="Chêne, Olivier, Cerisier...">
+    <div class="mbtns">
+      <button class="mbtn no" id="m-cancel">Annuler</button>
+      <button class="mbtn ok" id="m-ok">✓ Confirmer</button>
+    </div>
+  </div>
+</div>
+
+<!-- List -->
+<div class="overlay" id="list-modal" style="align-items:flex-end;">
+  <div class="lbox">
+    <div class="ltop"><h3>🌳 Arbres repérés</h3><button class="lclose" id="l-close">✕</button></div>
+    <div class="lscroll" id="l-body"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- Leaflet JS — must be HTTPS to work -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── Check Leaflet loaded ──────────────────────────────
+if (typeof L === 'undefined') {
+  document.body.innerHTML = `
+    <div style="padding:30px;text-align:center;background:#1a3009;height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;">
+      <div style="font-size:48px">⚠️</div>
+      <h2 style="color:#f7f4ed">Connexion requise</h2>
+      <p style="color:#8fb56b;font-size:14px;max-width:280px;line-height:1.6">
+        Cette app doit être ouverte depuis internet (HTTPS) pour fonctionner.<br><br>
+        Hébergez le fichier sur <b>GitHub Pages</b> ou envoyez-vous le lien par email.
+      </p>
+      <button onclick="location.reload()" style="background:#5a8a2e;color:white;border:none;padding:12px 24px;border-radius:12px;font-size:15px;cursor:pointer;">🔄 Réessayer</button>
+    </div>`;
+  throw new Error('Leaflet non chargé — pas de connexion HTTPS');
+}
+
+// ── Config ────────────────────────────────────────────
+const HOME = [44.5298, 5.0548]; // 465 Route des Hubacs
+
+// ── Map init ──────────────────────────────────────────
+const map = L.map('map', { center: HOME, zoom: 18, zoomControl: true, attributionControl: true });
+
+// OSM standard layer
+const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '© OpenStreetMap'
+});
+
+// Satellite layer (ESRI)
+const satLayer = L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  { maxZoom: 19, attribution: '© ESRI Satellite' }
+);
+
+// Start with satellite
+satLayer.addTo(map);
+let isSat = true;
+
+// Toggle satellite/map
+document.getElementById('btn-sat').addEventListener('click', () => {
+  if (isSat) {
+    map.removeLayer(satLayer); osmLayer.addTo(map);
+    document.getElementById('btn-sat').textContent = '🗺 Plan';
+    document.getElementById('btn-sat').classList.remove('on');
+  } else {
+    map.removeLayer(osmLayer); satLayer.addTo(map);
+    document.getElementById('btn-sat').textContent = '🛰 Satellite';
+    document.getElementById('btn-sat').classList.add('on');
+  }
+  isSat = !isSat;
+});
+
+// Click on map → place tree manually
+map.on('click', e => openModal(e.latlng.lat, e.latlng.lng, false));
+
+// ── State ─────────────────────────────────────────────
+let trees = [];
+let gpsEnabled = false, gpsLatLng = null, watchId = null;
+let gpsMarker = null, gpsCircle = null;
+let pendingLatLng = null;
+
+// ── Tree icon factory ─────────────────────────────────
+function makeIcon(num) {
+  return L.divIcon({
+    className: '',
+    html: `<div class="tree-div-icon" title="Arbre #${num}">🌳</div>`,
+    iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -18]
+  });
+}
+
+function addMarker(tree) {
+  const m = L.marker([tree.lat, tree.lng], { icon: makeIcon(tree._num) })
+    .addTo(map)
+    .bindPopup(`<b>#${tree._num}${tree.label ? ' — ' + tree.label : ''}</b><br><small>${tree.lat.toFixed(6)}, ${tree.lng.toFixed(6)}</small>`);
+  tree.marker = m;
+}
+
+function refreshNums() {
+  trees.forEach((t, i) => {
+    t._num = i + 1;
+    if (t.marker) t.marker.setIcon(makeIcon(i + 1));
+  });
+}
+
+// ── GPS ───────────────────────────────────────────────
+document.getElementById('btn-gps').addEventListener('click', () => {
+  gpsEnabled ? stopGPS() : startGPS();
+});
+
+function startGPS() {
+  if (!navigator.geolocation) { toast('❌ GPS non disponible'); return; }
+  document.getElementById('gdot').className = 'dot s';
+  document.getElementById('gtext').textContent = 'Recherche GPS...';
+  watchId = navigator.geolocation.watchPosition(onGPS, onGPSErr, {
+    enableHighAccuracy: true, maximumAge: 2000, timeout: 20000
+  });
+  gpsEnabled = true;
+  document.getElementById('btn-gps').textContent = '📡 Actif';
+  document.getElementById('btn-gps').classList.add('on');
+}
+
+function stopGPS() {
+  if (watchId) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+  gpsEnabled = false; gpsLatLng = null;
+  if (gpsMarker) { map.removeLayer(gpsMarker); gpsMarker = null; }
+  if (gpsCircle) { map.removeLayer(gpsCircle); gpsCircle = null; }
+  document.getElementById('gdot').className = 'dot';
+  document.getElementById('gtext').textContent = 'GPS désactivé';
+  document.getElementById('gcoords').textContent = '';
+  document.getElementById('btn-gps').textContent = '📡 GPS';
+  document.getElementById('btn-gps').classList.remove('on');
+}
+
+function onGPS(pos) {
+  const { latitude: lat, longitude: lng, accuracy: acc } = pos.coords;
+  gpsLatLng = { lat, lng, acc };
+  document.getElementById('gdot').className = 'dot ok';
+  document.getElementById('gtext').textContent = `GPS ±${Math.round(acc)}m`;
+  document.getElementById('gcoords').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+  const ll = L.latLng(lat, lng);
+  if (!gpsMarker) {
+    gpsMarker = L.circleMarker(ll, {
+      radius: 9, fillColor: '#4fc3f7', fillOpacity: 1,
+      color: '#fff', weight: 3, zIndexOffset: 999
+    }).addTo(map).bindPopup('📍 Vous êtes ici');
+    gpsCircle = L.circle(ll, { radius: acc, color: '#4fc3f7', fillOpacity: .08, weight: 1 }).addTo(map);
+    map.setView(ll, Math.max(map.getZoom(), 18));
+  } else {
+    gpsMarker.setLatLng(ll);
+    gpsCircle.setLatLng(ll).setRadius(acc);
+  }
+}
+
+function onGPSErr(e) {
+  const msgs = { 1: 'Permission refusée', 2: 'Position indisponible', 3: 'Délai dépassé' };
+  document.getElementById('gdot').className = 'dot';
+  document.getElementById('gtext').textContent = msgs[e.code] || 'Erreur GPS';
+  toast('GPS: ' + (msgs[e.code] || e.message));
+}
+
+// ── Plant button ──────────────────────────────────────
+document.getElementById('btn-plant').addEventListener('click', () => {
+  if (!gpsEnabled || !gpsLatLng) { toast('📡 Activez le GPS d\'abord'); return; }
+  document.getElementById('btn-plant').classList.add('flash');
+  setTimeout(() => document.getElementById('btn-plant').classList.remove('flash'), 400);
+  openModal(gpsLatLng.lat, gpsLatLng.lng, true);
+});
+
+// ── Modal ─────────────────────────────────────────────
+function openModal(lat, lng, fromGPS) {
+  pendingLatLng = { lat, lng, fromGPS };
+  document.getElementById('tree-input').value = '';
+  document.getElementById('modal').classList.add('on');
+  setTimeout(() => document.getElementById('tree-input').focus(), 120);
+}
+
+document.getElementById('m-ok').addEventListener('click', confirmTree);
+document.getElementById('m-cancel').addEventListener('click', closeModal);
+document.getElementById('tree-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') confirmTree();
+  if (e.key === 'Escape') closeModal();
+});
+
+function closeModal() {
+  pendingLatLng = null;
+  document.getElementById('modal').classList.remove('on');
+}
+
+function confirmTree() {
+  if (!pendingLatLng) return;
+  const label = document.getElementById('tree-input').value.trim();
+  const tree = {
+    id: Date.now(),
+    lat: pendingLatLng.lat, lng: pendingLatLng.lng,
+    label,
+    fromGPS: pendingLatLng.fromGPS,
+    _num: trees.length + 1
+  };
+  trees.push(tree);
+  addMarker(tree);
+  updateCount(); saveLocal(); closeModal();
+  toast(`🌳 Arbre #${trees.length} repéré !${label ? ' (' + label + ')' : ''}`);
+}
+
+// ── Undo ──────────────────────────────────────────────
+document.getElementById('btn-undo').addEventListener('click', () => {
+  if (!trees.length) { toast('Aucun arbre à supprimer'); return; }
+  const n = trees.length;
+  const t = trees.pop();
+  if (t.marker) map.removeLayer(t.marker);
+  refreshNums(); updateCount(); saveLocal();
+  toast(`↩ Arbre #${n} supprimé`);
+});
+
+// ── List ──────────────────────────────────────────────
+document.getElementById('btn-list').addEventListener('click', showList);
+document.getElementById('l-close').addEventListener('click', () => document.getElementById('list-modal').classList.remove('on'));
+
+function showList() {
+  const div = document.getElementById('l-body');
+  div.innerHTML = trees.length
+    ? trees.map((t, i) => `
+        <div class="litem">
+          <div class="lnum">${i+1}</div>
+          <div class="linfo">
+            <b>${t.label || '(sans nom)'}</b>
+            <small>${t.lat.toFixed(6)}, ${t.lng.toFixed(6)}${t.fromGPS ? ' 📡' : ' 👆'}</small>
+          </div>
+          <button class="lbtn go" onclick="flyTo(${i})">🎯</button>
+          <button class="lbtn del" onclick="delTree(${t.id})">✕</button>
+        </div>`).join('')
+    : '<p style="color:var(--sage);padding:14px;font-size:13px">Aucun arbre repéré.</p>';
+  document.getElementById('list-modal').classList.add('on');
+}
+
+window.flyTo = (i) => {
+  const t = trees[i];
+  map.setView([t.lat, t.lng], 19);
+  if (t.marker) t.marker.openPopup();
+  document.getElementById('list-modal').classList.remove('on');
+};
+
+window.delTree = (id) => {
+  const i = trees.findIndex(t => t.id === id);
+  if (i === -1) return;
+  if (trees[i].marker) map.removeLayer(trees[i].marker);
+  trees.splice(i, 1);
+  refreshNums(); updateCount(); saveLocal(); showList();
+};
+
+// ── Export CSV ────────────────────────────────────────
+document.getElementById('btn-export').addEventListener('click', () => {
+  if (!trees.length) { toast('Aucun arbre à exporter'); return; }
+  const csv = 'Num,Espece,Latitude,Longitude,Source\n' +
+    trees.map((t, i) =>
+      `${i+1},"${t.label||''}",${t.lat.toFixed(7)},${t.lng.toFixed(7)},${t.fromGPS?'GPS':'Manuel'}`
+    ).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = `arbres_hubacs_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  toast(`✓ ${trees.length} arbre(s) exporté(s)`);
+});
+
+// ── Storage ───────────────────────────────────────────
+function saveLocal() {
+  try {
+    localStorage.setItem('arbres_v6', JSON.stringify(
+      trees.map(({ id, lat, lng, label, fromGPS }) => ({ id, lat, lng, label, fromGPS }))
+    ));
+  } catch(e) {}
+}
+
+function loadLocal() {
+  try {
+    const s = localStorage.getItem('arbres_v6');
+    if (!s) return;
+    JSON.parse(s).forEach((t, i) => {
+      const tree = { ...t, _num: i + 1 };
+      trees.push(tree);
+      addMarker(tree);
+    });
+    updateCount();
+    if (trees.length) toast(`${trees.length} arbre(s) restauré(s) 🌳`);
+  } catch(e) {}
+}
+
+function updateCount() {
+  document.getElementById('hcount').textContent = trees.length + ' arbre(s)';
+}
+
+// ── Toast ─────────────────────────────────────────────
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('on'), 2800);
+}
+
+// ── Start ─────────────────────────────────────────────
+loadLocal();
+</script>
+</body>
+</html>
