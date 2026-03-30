@@ -264,6 +264,7 @@ function stopGPS() {
 }
 
 function onGPS(pos) {
+  if (!gpsEnabled) return;
   const { latitude: lat, longitude: lng, accuracy: acc } = pos.coords;
   gpsLatLng = { lat, lng, acc };
   document.getElementById('gdot').className = 'dot ok';
@@ -285,15 +286,18 @@ function onGPS(pos) {
 }
 
 function onGPSErr(e) {
+  if (!gpsEnabled) return;
   const msgs = { 1: 'Permission refusée', 2: 'Position indisponible', 3: 'Délai dépassé' };
   document.getElementById('gdot').className = 'dot';
   document.getElementById('gtext').textContent = msgs[e.code] || 'Erreur GPS';
   toast('GPS: ' + (msgs[e.code] || e.message));
+  if (e.code === 1 || e.code === 2) stopGPS();
 }
 
 // ── Plant button ──────────────────────────────────────
 document.getElementById('btn-plant').addEventListener('click', () => {
-  if (!gpsEnabled || !gpsLatLng) { toast('📡 Activez le GPS d\'abord'); return; }
+  if (!gpsEnabled) { toast('📡 Activez le GPS d\'abord'); return; }
+  if (!gpsLatLng) { toast('⏳ GPS en cours de recherche…'); return; }
   document.getElementById('btn-plant').classList.add('flash');
   setTimeout(() => document.getElementById('btn-plant').classList.remove('flash'), 400);
   openModal(gpsLatLng.lat, gpsLatLng.lng, true);
